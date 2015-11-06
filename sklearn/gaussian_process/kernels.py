@@ -26,7 +26,7 @@ import math
 
 import numpy as np
 from scipy.special import kv, gamma
-from scipy.spatial.distance import pdist, cdist, squareform
+from scipy.spatial.distance import pdist, cdist, squareform, sqeuclidean
 
 from ..metrics.pairwise import pairwise_kernels
 from ..externals import six
@@ -1787,3 +1787,76 @@ class PairwiseKernel(Kernel):
     def __repr__(self):
         return "{0}(gamma={1}, metric={2})".format(
             self.__class__.__name__, self.gamma, self.metric)
+
+"""
+Kernel defined by User 
+"""
+class SquareExpWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
+    """SquareExpWithBool kernel is a user defined kernel for autonomous driving on Intersection
+
+    It is defined by the following equation 
+
+    k((x_i, y_i, delta_x_i, delta_y_i, exist_i1, delta_x_i1, delta_y_i1, ... ) 
+        , (x_j, y_j, delta_x_j, delta_y_j, exist_j1, delta_x_j1, delta_y_j1, ... )) = 
+    delta_x exp(-1 / 2 (d()) )
+    """
+    def __init__(self, num_pattern = 2, length_scale = 1.0, weight_scale = 1.0, length_scale_bounds=(1e-5,1e5) \
+        weight_scale_bounds=(1e-5,1e5)):
+        self.length_scale = np.asarray(length_scale, dtype=np.float)
+        self.weight_scale = np.asarray(weight_scale, dtype=np.float)
+        self.num_pattern = num_pattern
+        self.length_scale_bounds = length_scale_bounds
+        self.weight_scale_bounds = weight_scale_bounds
+        self.start_pattern = 4
+        self.start_len_scale = 2
+        self.pattern_len = 3
+
+    def DistanceMetricWithBool(self, x1, x2, length_scale, num_patterns):
+        """
+        length_scale[0]: length scale for the distance metric
+        length_scale[1]: length scale for the speed metric
+        length_scale[pattern_len]: length scale of the speed metric for the ith pattern 
+        """
+        distance = 0
+        distance += sqeuclidean(x1[0:2], x2[0:2]) / length_scale[0]
+        distance += sqeuclidean(x1[2:4], x2[2:4]) / length_scale[1]
+        index = self.start_pattern
+        for i in range(num_pattern):
+            index = self.start_pattern + self.pattern_len * i 
+            if (x1[index] > 0 and x2[index] > 0):
+                distance += sqeuclidean(x1[index+1:index+3], x2[index+1:index+3]) / length_scale[i * 2 + self.start_len_scale] 
+            else:
+                distance += pow((x1[index] - x2[index]), 2) / length_scale[i * 2 + 1 + self.start_len_scale]
+
+        return distance
+
+    def __call__(self, X, Y=None, eval_gradient = False):
+        """Return the kernel k(X, Y) and optionally its gradient.
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Y : array, shape (n_samples_Y, n_features), (optional, default=None)
+            Right argument of the returned kernel k(X, Y). If None, k(X, X)
+            if evaluated instead.
+
+        eval_gradient : bool (optional, default=False)
+            Determines whether the gradient with respect to the kernel
+            hyperparameter is determined. Only supported when Y is None.
+
+        Returns
+        -------
+        K : array, shape (n_samples_X, n_samples_Y)
+            Kernel k(X, Y)
+
+        K_gradient : array (opt.), shape (n_samples_X, n_samples_X, n_dims_parameters)
+            The gradient of the kernel k(X, X) with respect to the
+            hyperparameter of the kernel. Only returned when eval_gradient
+            is True.
+        """
+        X = np.atleast_2d(X)
+        if Y is None:
+            dists = pdist
+        
