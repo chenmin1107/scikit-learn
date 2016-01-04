@@ -65,10 +65,18 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels \
     import RBF, WhiteKernel, RationalQuadratic, ExpSineSquared
 from sklearn.datasets import fetch_mldata
+import sys
 
 data = fetch_mldata('mauna-loa-atmospheric-co2').data
 X = data[:, [1]]
 y = data[:, 0]
+
+print 'display data'
+print 'x: ', X
+print 'y: ', y
+a = input('continue? ')
+if a != 'y':
+    sys.exit(0)
 
 # Kernel with parameters given in GPML book
 k1 = 66.0**2 * RBF(length_scale=67.0)  # long term smooth rising trend

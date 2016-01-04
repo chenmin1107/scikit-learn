@@ -154,6 +154,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                 * RBF(1.0, length_scale_bounds="fixed")
         else:
             self.kernel_ = clone(self.kernel)
+            # print("kernel recived: %s" % self.kernel_)
 
         self.rng = check_random_state(self.random_state)
 
@@ -179,9 +180,12 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         self.X_train_ = np.copy(X) if self.copy_X_train else X
         self.y_train_ = np.copy(y) if self.copy_X_train else y
 
+        print ' ### n dims of the kernel: ', self.kernel_.n_dims
+
         if self.optimizer is not None and self.kernel_.n_dims > 0:
             # Choose hyperparameters based on maximizing the log-marginal
             # likelihood (potentially starting from several initial values)
+            print ' #### start optimize'
             def obj_func(theta, eval_gradient=True):
                 if eval_gradient:
                     lml, grad = self.log_marginal_likelihood(
@@ -190,6 +194,9 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                 else:
                     return -self.log_marginal_likelihood(theta)
 
+            print ' #### after obj_func'
+            print ' initial theta: ', self.kernel_.theta
+            print ' initial bounds: ', self.kernel_.bounds
             # First optimize starting from theta specified in kernel
             optima = [(self._constrained_optimization(obj_func,
                                                       self.kernel_.theta,
@@ -197,6 +204,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
 
             # Additional runs are performed from log-uniform chosen initial
             # theta
+            print ' #### after optima'
             if self.n_restarts_optimizer > 0:
                 if not np.isfinite(self.kernel_.bounds).all():
                     raise ValueError(
@@ -214,6 +222,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             lml_values = list(map(itemgetter(1), optima))
             self.kernel_.theta = optima[np.argmin(lml_values)][0]
             self.log_marginal_likelihood_value_ = -np.min(lml_values)
+            print ' ### end of optimizer '
         else:
             self.log_marginal_likelihood_value_ = \
                 self.log_marginal_likelihood(self.kernel_.theta)

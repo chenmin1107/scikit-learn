@@ -41,6 +41,7 @@ def clone(estimator, safe=True):
 
     """
     estimator_type = type(estimator)
+    # print "estimator type", estimator_type
     # XXX: not handling dictionaries
     if estimator_type in (list, tuple, set, frozenset):
         return estimator_type([clone(e, safe=safe) for e in estimator])
@@ -53,9 +54,11 @@ def clone(estimator, safe=True):
                             "as it does not implement a 'get_params' methods."
                             % (repr(estimator), type(estimator)))
     klass = estimator.__class__
+    # print 'klass: ', klass
     new_object_params = estimator.get_params(deep=False)
     for name, param in six.iteritems(new_object_params):
         new_object_params[name] = clone(param, safe=False)
+        # print name, param
     new_object = klass(**new_object_params)
     params_set = new_object.get_params(deep=False)
 
