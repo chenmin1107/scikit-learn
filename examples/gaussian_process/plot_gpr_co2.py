@@ -74,6 +74,7 @@ y = data[:, 0]
 print 'display data'
 print 'x: ', X
 print 'y: ', y
+print 'shape of data', y.shape
 a = input('continue? ')
 if a != 'y':
     sys.exit(0)
@@ -117,7 +118,7 @@ print("\nLearned kernel: %s" % gp.kernel_)
 print("Log-marginal-likelihood: %.3f"
       % gp.log_marginal_likelihood(gp.kernel_.theta))
 
-X_ = np.linspace(X.min(), X.max() + 30, 1000)[:, np.newaxis]
+X_ = np.linspace(X.min(), X.max() + 50, 1000)[:, np.newaxis]
 y_pred, y_std = gp.predict(X_, return_std=True)
 
 # Illustration

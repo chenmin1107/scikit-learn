@@ -181,6 +181,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         self.y_train_ = np.copy(y) if self.copy_X_train else y
 
         print ' ### n dims of the kernel: ', self.kernel_.n_dims
+        print ' initial theta: ', self.kernel_.theta
+        print ' initial bounds: ', self.kernel_.bounds
 
         if self.optimizer is not None and self.kernel_.n_dims > 0:
             # Choose hyperparameters based on maximizing the log-marginal
@@ -195,8 +197,6 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                     return -self.log_marginal_likelihood(theta)
 
             print ' #### after obj_func'
-            print ' initial theta: ', self.kernel_.theta
-            print ' initial bounds: ', self.kernel_.bounds
             # First optimize starting from theta specified in kernel
             optima = [(self._constrained_optimization(obj_func,
                                                       self.kernel_.theta,
@@ -231,6 +231,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         # of actual query points
         K = self.kernel_(self.X_train_)
         K[np.diag_indices_from(K)] += self.alpha
+        print 'K matrix: ', K
+        print 'eigen values: ', np.linalg.eigvalsh(K)
         self.L_ = cholesky(K, lower=True)  # Line 2
         self.alpha_ = cho_solve((self.L_, True), self.y_train_)  # Line 3
 

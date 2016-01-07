@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels \
-    import SquareExpWithBool
+    import SquareExpWithBool, RBF
 from sklearn.datasets import fetch_mldata
 import sys
 
@@ -11,7 +11,7 @@ import sys
 # navigation
 X = []
 y = []
-for i in np.linspace(0,10,20):
+for i in range(10):
     X.append([i, 0, 0, 0, 0, 0, 0])
     y.append(i * 2)
 
@@ -22,8 +22,7 @@ if a == 'y':
     print 'y: ', y
 
 # initialize the kernel 
-kernel_test = SquareExpWithBool(num_pattern = 1, length_scale = [2, 2, 2],
-        weight_scale = [2, 2])
+kernel_test = RBF(length_scale = [2, 2, 2, 2, 2, 2, 2])
 
 print 'after kernel init'
 
@@ -41,7 +40,7 @@ print("Log-marginal-likelihood: %.3f"
 
 X_ = []
 for i in range(15):
-    X_.append([i+0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+    X_.append([i, 0, 0, 0, 0, 0, 0])
 y_pred, y_std = gp_test.predict(X_, return_std=True)
 
 # Plot the predict result
