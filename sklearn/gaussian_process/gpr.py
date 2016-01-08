@@ -189,6 +189,7 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             # likelihood (potentially starting from several initial values)
             print ' #### start optimize'
             def obj_func(theta, eval_gradient=True):
+                print 'call obj_func with theta: ', theta
                 if eval_gradient:
                     lml, grad = self.log_marginal_likelihood(
                         theta, eval_gradient=True)
@@ -382,16 +383,21 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             return self.log_marginal_likelihood_value_
 
         kernel = self.kernel_.clone_with_theta(theta)
+        print 'theta for log marginal likelyhood', theta
 
         if eval_gradient:
             K, K_gradient = kernel(self.X_train_, eval_gradient=True)
+            print 'eval gradient in log likely'
+            # print 'K gradient for log likely: ', K_gradient
         else:
             K = kernel(self.X_train_)
+            print 'do not eval gradient in log likely'
 
         K[np.diag_indices_from(K)] += self.alpha
         try:
             L = cholesky(K, lower=True)  # Line 2
         except np.linalg.LinAlgError:
+            print 'choleky error ###', K
             return (-np.inf, np.zeros_like(theta)) \
                 if eval_gradient else -np.inf
 
@@ -419,6 +425,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
             log_likelihood_gradient = log_likelihood_gradient_dims.sum(-1)
 
         if eval_gradient:
+            print 'log_likelihood: ', log_likelihood
+            print 'log_likelihood_gradient: ', log_likelihood_gradient
             return log_likelihood, log_likelihood_gradient
         else:
             return log_likelihood

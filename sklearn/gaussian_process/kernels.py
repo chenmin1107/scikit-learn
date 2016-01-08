@@ -1795,6 +1795,159 @@ class PairwiseKernel(Kernel):
 """
 Kernel defined by User 
 """
+class RBFWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
+    """RBFWithBool kernel is a user defined kernel for autonomous driving on Intersection
+
+    It is defined by the following equation 
+
+    k((x_i, y_i, delta_x_i, delta_y_i, exist_i1, delta_x_i1, delta_y_i1, ... ) 
+        , (x_j, y_j, delta_x_j, delta_y_j, exist_j1, delta_x_j1, delta_y_j1, ... )) = 
+    exp(-1 / 2 (sigma_distance * d((x_i, y_i) / length_scale_distance, (x_j, y_j) / length_scale_distance)^2 + 
+    sigma_speed * d((delta_x_i, delta_y_i) / length_scale_speed, (delta_x_j, delta_y_j) / length_scale_speed)^2 
+    + sigma_pattern_m * d(Exist_i_m / length_scale_exist , Exist_j_m / length_scale_exist)^2 + 
+    sigma_pattern_m * d((delta_x_i_m, delta_y_i_m) / length_scale_speed, (delta_x_j_m, delta_y_j_m) / length_scale_speed)^2)
+    """
+    def __init__(self, num_pattern, length_scale, weight_scale, length_scale_bounds=(1e-5,1e5),\
+        weight_scale_bounds=(1e-4,1e4)):
+        self.length_scale = np.asarray(length_scale, dtype=np.float)
+        self.weight_scale = np.asarray(weight_scale, dtype=np.float)
+        self.num_pattern = num_pattern
+        self.length_scale_bounds = length_scale_bounds
+        self.weight_scale_bounds = weight_scale_bounds
+        self.start_pattern = 4
+        self.pattern_len = 3
+        self.weight_pattern_start = 1
+
+        self.hyperparameter_length_scale = Hyperparameter("length_scale", "numeric", length_scale_bounds,\
+            len(length_scale))
+        self.hyperparameter_weight_scale = Hyperparameter("weight_scale", "numeric", weight_scale_bounds,\
+            len(weight_scale))
+
+    def __call__(self, X, Y=None, eval_gradient = False):
+        """Return the kernel k(X, Y) and optionally its gradient.
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Y : array, shape (n_samples_Y, n_features), (optional, default=None)
+            Right argument of the returned kernel k(X, Y). If None, k(X, X)
+            if evaluated instead.
+
+        eval_gradient : bool (optional, default=False)
+            Determines whether the gradient with respect to the kernel
+            hyperparameter is determined. Only supported when Y is None.
+
+        Returns
+        -------
+        K : array, shape (n_samples_X, n_samples_Y)
+            Kernel k(X, Y)
+
+        K_gradient : array (opt.), shape (n_samples_X, n_samples_X, n_dims_parameters)
+            The gradient of the kernel k(X, X) with respect to the
+            hyperparameter of the kernel. Only returned when eval_gradient
+            is True.
+        """
+        print 'call of RBF bool has been called: ', self.weight_scale
+        X = np.atleast_2d(X)
+        dists = []
+        if Y is None:
+            for i in range(len(X)):
+                for j in range(i + 1, len(X)):
+                    dists.append(self.DistanceMetricWithBool(X[i], X[j], self.length_scale, self.weight_scale, self.num_pattern))
+            
+            dists = np.array(dists)
+            K = np.exp(-.5 * dists)
+            K = squareform(K)
+            np.fill_diagonal(K, 1) 
+        else:
+            if eval_gradient:
+                raise ValueError(
+                    "Gradient can only be evaluated when Y is None.")
+            for i in range(len(X)):
+                dist = []
+                for j in range(len(Y)):
+                    dis = self.DistanceMetricWithBool(X[i], Y[j], self.length_scale, self.weight_scale, self.num_pattern)
+                    dist.append(np.exp(-.5 * dis))
+                dists.append(dist)
+            K = np.array(dists)
+
+        if eval_gradient:
+            #gradient with respect to the length scale
+            weight_scale_gradient = np.zeros([len(X), len(X), len(self.weight_scale)])
+            for i in range(0, len(X)):
+                for j in range(0, len(X)):
+                    weight_scale_gradient[i][j][0] = K[i][j] * -.5 * self.SqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])\
+                            * self.SqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])
+                    for k in range(self.num_pattern):
+                        #here# compute the gradient for the weight of the ith pattern
+                        index = self.start_pattern + self.pattern_len * k 
+                        weight_scale_gradient[i][j][k + self.weight_pattern_start] = np.exp(-.5 * sqeuclidean(X[i][index] / self.length_scale[2] ,\
+                            X[j][index] / self.length_scale[2])) + np.exp(-.5 * sqeuclidean(X[i][index+1:index+3] \
+                            / self.length_scale[1], X[j][index+1:index+3] / self.length_scale[1]))
+
+            # weight_scale_gradient = weight_scale_gradient[:, :, :, np.newaxis]
+            print 'shape of weight scale gradient', weight_scale_gradient.shape
+
+            #gradient with respect to the weight scale
+            length_scale_gradient = np.zeros([len(X), len(X), len(self.length_scale)])
+            for i in range(0, len(X)):
+                for j in range(0, len(X)):
+                    [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])
+                    length_scale_gradient[i][j][0] = self.weight_scale[0] * exp_sq_dis * sq_dis / self.length_scale[0]
+                    [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])
+                    length_scale_gradient[i][j][1] += self.weight_scale[0] * exp_sq_dis * sq_dis / self.length_scale[1] 
+                    for k in range(self.num_pattern):
+                        # compute the gradient for the weight of the ith pattern
+                        index = self.start_pattern + self.pattern_len * k 
+                        [sq_dis_exist, exp_sq_dis_exist] = self.ExpSqEuclidean(X[i][index], X[j][index], self.length_scale[2])
+                        [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][index+1:index+3], X[j][index+1:index+3], self.length_scale[1])
+                        length_scale_gradient[i][j][1] += self.weight_scale[k + self.weight_pattern_start] * exp_sq_dis * sq_dis / self.length_scale[1]
+                        length_scale_gradient[i][j][2] += self.weight_scale[k + self.weight_pattern_start] * exp_sq_dis_exist * sq_dis_exist / self.length_scale[2]
+            # length_scale_gradient = length_scale_gradient[:, :, :, np.newaxis]
+            print 'shape of length scale gradient', length_scale_gradient.shape
+
+            K_gradient = np.dstack((length_scale_gradient, weight_scale_gradient))
+            print 'shape and content of the K gradient', K_gradient.shape
+
+            return K, K_gradient
+
+        else:
+            return K 
+            
+    def __repr__(self):
+        return "{0}(weight_scale={1}, length_scale={2})".format(self.__class__.__name__,\
+            ", ".join(map("{0:.3g}".format, self.weight_scale)),\
+            ", ".join(map("{0:.3g}".format, self.length_scale)))
+
+    def SqEuclidean(self, x1, x2, length_scale_):
+        return sqeuclidean(x1 / length_scale_, x2 / length_scale_)
+
+    def ExpSqEuclidean(self, x1, x2, length_scale_):
+        sqeuc_dis = sqeuclidean(x1 / length_scale_, x2 / length_scale_)
+        exp_sqeuc_dis = np.exp(-.5 * sqeuc_dis)
+        return [sqeuc_dis, exp_sqeuc_dis]
+
+    def DistanceMetricWithBool(self, x1, x2, length_scale, weight_scale, num_pattern):
+        """
+        length_scale[0]: length scale for the distance metric
+        length_scale[1]: length scale for the speed metric
+        length_scale[2]: length_scale for the exist metric (which is boolean distance)
+        weight_scale[0]: weigh scale for the self status
+        weight_scale[pattern i + 1]: weight_scale for the ith pattern
+        """
+        distance = 0
+        distance += weight_scale[0] * sqeuclidean(x1[0:2] / length_scale[0], x2[0:2] / length_scale[0])
+        distance += weight_scale[0] * sqeuclidean(x1[2:4] / length_scale[1], x2[2:4] / length_scale[1])
+        for i in range(num_pattern):
+            index = self.start_pattern + self.pattern_len * i 
+            distance += weight_scale[i + self.weight_pattern_start] * sqeuclidean(x1[index] / length_scale[2] ,\
+                    x2[index] / length_scale[2])
+            distance += weight_scale[i + self.weight_pattern_start] * sqeuclidean(x1[index+1:index+3] \
+                    / length_scale[1], x2[index+1:index+3] / length_scale[1]) 
+        return distance
+
 class SquareExpWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
     """SquareExpWithBool kernel is a user defined kernel for autonomous driving on Intersection
 
@@ -1807,11 +1960,12 @@ class SquareExpWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
     + sigma_pattern_m * exp(-1 / 2 d(Exist_i , Exist_j)^2) + 
     sigma_pattern_i * exp(-1 / 2 d((delta_x_i_m, delta_y_i_m) / length_scale_speed, (delta_x_j_m, delta_y_j_m) / length_scale_speed)^2)
     """
-    def __init__(self, num_pattern, length_scale, weight_scale, length_scale_bounds=(1e-5,1e5),\
+    def __init__(self, num_pattern, alpha, length_scale, weight_scale, length_scale_bounds=(1e-5,1e5),\
         weight_scale_bounds=(1e-4,1e4)):
         self.length_scale = np.asarray(length_scale, dtype=np.float)
         self.weight_scale = np.asarray(weight_scale, dtype=np.float)
         self.num_pattern = num_pattern
+        self.alpha = alpha
         self.length_scale_bounds = length_scale_bounds
         self.weight_scale_bounds = weight_scale_bounds
         self.start_pattern = 4
@@ -1862,7 +2016,7 @@ class SquareExpWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
             
             dists = np.array(dists)
             K = squareform(dists)
-            np.fill_diagonal(K, 9) 
+            np.fill_diagonal(K, 1) 
         else:
             if eval_gradient:
                 raise ValueError(
@@ -1911,7 +2065,7 @@ class SquareExpWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
             print 'shape of length scale gradient', length_scale_gradient.shape
 
             K_gradient = np.dstack((length_scale_gradient, weight_scale_gradient))
-            print 'shape of the K gradient', K_gradient.shape
+            print 'shape and content of the K gradient', K_gradient.shape
 
             return K, K_gradient
 
