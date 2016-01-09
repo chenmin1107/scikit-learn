@@ -1878,15 +1878,15 @@ class RBFWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
             weight_scale_gradient = np.zeros([len(X), len(X), len(self.weight_scale)])
             for i in range(0, len(X)):
                 for j in range(0, len(X)):
-                    weight_scale_gradient[i][j][0] = K[i][j] * -.5 * self.SqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])\
-                            * self.SqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])
+                    weight_scale_gradient[i][j][0] = K[i][j] * -.5 * (self.SqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])\
+                            + self.SqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1]))
                     for k in range(self.num_pattern):
-                        #here# compute the gradient for the weight of the ith pattern
+                        # compute the gradient for the weight of the ith pattern
                         index = self.start_pattern + self.pattern_len * k 
-                        weight_scale_gradient[i][j][k + self.weight_pattern_start] = np.exp(-.5 * sqeuclidean(X[i][index] / self.length_scale[2] ,\
-                            X[j][index] / self.length_scale[2])) + np.exp(-.5 * sqeuclidean(X[i][index+1:index+3] \
-                            / self.length_scale[1], X[j][index+1:index+3] / self.length_scale[1]))
-
+                        weight_scale_gradient[i][j][k + self.weight_pattern_start] = K[i][j] * -.5 * (self.SqEuclidean(X[i][index],\
+                                X[j][index], self.length_scale[2]) + self.SqEuclidean(X[i][index+1:index+3], X[j][index+1:index+3],\
+                                self.length_scale[1]))
+                                
             # weight_scale_gradient = weight_scale_gradient[:, :, :, np.newaxis]
             print 'shape of weight scale gradient', weight_scale_gradient.shape
 
@@ -1894,22 +1894,22 @@ class RBFWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
             length_scale_gradient = np.zeros([len(X), len(X), len(self.length_scale)])
             for i in range(0, len(X)):
                 for j in range(0, len(X)):
-                    [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])
-                    length_scale_gradient[i][j][0] = self.weight_scale[0] * exp_sq_dis * sq_dis / self.length_scale[0]
-                    [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])
-                    length_scale_gradient[i][j][1] += self.weight_scale[0] * exp_sq_dis * sq_dis / self.length_scale[1] 
+                    length_scale_gradient[i][j][0] = K[i][j] * self.weight_scale[0] * self.SqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])\
+                            / self.length_scale[0]
+                    length_scale_gradient[i][j][1] += K[i][j] * self.weight_scale[0] * self.SqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])\
+                            / self.length_scale[1]
                     for k in range(self.num_pattern):
                         # compute the gradient for the weight of the ith pattern
                         index = self.start_pattern + self.pattern_len * k 
-                        [sq_dis_exist, exp_sq_dis_exist] = self.ExpSqEuclidean(X[i][index], X[j][index], self.length_scale[2])
-                        [sq_dis, exp_sq_dis] = self.ExpSqEuclidean(X[i][index+1:index+3], X[j][index+1:index+3], self.length_scale[1])
-                        length_scale_gradient[i][j][1] += self.weight_scale[k + self.weight_pattern_start] * exp_sq_dis * sq_dis / self.length_scale[1]
-                        length_scale_gradient[i][j][2] += self.weight_scale[k + self.weight_pattern_start] * exp_sq_dis_exist * sq_dis_exist / self.length_scale[2]
+                        length_scale_gradient[i][j][1] += K[i][j] * self.weight_scale[k + self.weight_pattern_start] * self.SqEuclidean(\
+                                X[i][index+1:index+3], X[j][index+1:index+3], self.length_scale[1]) / self.length_scale[1]
+                        length_scale_gradient[i][j][2] += K[i][j] * self.weight_scale[k + self.weight_pattern_start] * self.SqEuclidean(\
+                                X[i][index], X[j][index], self.length_scale[2]) / self.length_scale[2]
             # length_scale_gradient = length_scale_gradient[:, :, :, np.newaxis]
             print 'shape of length scale gradient', length_scale_gradient.shape
 
             K_gradient = np.dstack((length_scale_gradient, weight_scale_gradient))
-            print 'shape and content of the K gradient', K_gradient.shape
+            print 'shape and content of the K gradient', K_gradient.shape, K_gradient
 
             return K, K_gradient
 
@@ -1923,11 +1923,6 @@ class RBFWithBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
 
     def SqEuclidean(self, x1, x2, length_scale_):
         return sqeuclidean(x1 / length_scale_, x2 / length_scale_)
-
-    def ExpSqEuclidean(self, x1, x2, length_scale_):
-        sqeuc_dis = sqeuclidean(x1 / length_scale_, x2 / length_scale_)
-        exp_sqeuc_dis = np.exp(-.5 * sqeuc_dis)
-        return [sqeuc_dis, exp_sqeuc_dis]
 
     def DistanceMetricWithBool(self, x1, x2, length_scale, weight_scale, num_pattern):
         """
