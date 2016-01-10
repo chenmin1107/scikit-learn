@@ -168,6 +168,9 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         else:
             self.y_train_mean = np.zeros(1)
 
+        # y used for training
+        print '!!!y used for training: ', y
+
         if np.iterable(self.alpha) \
            and self.alpha.shape[0] != y.shape[0]:
             if self.alpha.shape[0] == 1:

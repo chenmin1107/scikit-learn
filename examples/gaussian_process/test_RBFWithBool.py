@@ -30,8 +30,7 @@ if a == 'y':
     print 'y: ', y
 
 # initialize the kernel 
-kernel_test = RBFWithBool(num_pattern = 1, length_scale = [2, 2, 2],
-        weight_scale = [2, 2])
+kernel_test = RBFWithBool(num_pattern = 1, length_scale = [2, 2, 2], weight_scale = [2, 2])
 
 print 'after kernel init'
 
