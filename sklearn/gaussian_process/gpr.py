@@ -134,6 +134,21 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         self.copy_X_train = copy_X_train
         self.random_state = random_state
 
+    # added by user
+    def InitKernel(self):
+        self.kernel_ = clone(self.kernel)
+    def InitKernel_learned(self, theta_learned, alpha_learned, L_learned, X_train_learned, y_train_mean_learned):
+        self.kernel_ = clone(self.kernel)
+        self.kernel_ = self.clone_with_theta(theta_learned)
+        self.alpha_learned = alpha_learned
+        self.L_learned = L_learned
+        self.X_train_learned = X_train_learned
+        self.y_train_mean_learned = y_train_mean_learned
+    def GetTheta(self):
+        return self.kernel_.theta
+    def GetLearnedParams(self):
+        return [self.alpha_, self.L_, self.y_train_mean]
+
     def fit(self, X, y):
         """Fit Gaussian process regression model
 
@@ -241,6 +256,36 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         self.alpha_ = cho_solve((self.L_, True), self.y_train_)  # Line 3
 
         return self
+    
+    # user defined predict function, can predict with learned GP without going through the fit
+    # function
+    def predict_learned(self, X, return_std=False):
+        X = check_array(X)
+
+        # Predict based on GP posterior
+        K_trans = self.kernel_(X, X_train_learned)
+        y_mean = K_trans.dot(alpha_learned)  # Line 4 (y_mean = f_star)
+        y_mean = self.y_train_mean_learned + y_mean  # undo normal.
+        if return_std:
+            # compute inverse K_inv of K based on its Cholesky
+            # decomposition L and its inverse L_inv
+            L_inv = solve_triangular(self.L_learned.T, np.eye(self.L_learned.shape[0]))
+            K_inv = L_inv.dot(L_inv.T)
+            # Compute variance of predictive distribution
+            y_var = self.kernel_.diag(X)
+            y_var -= np.einsum("ki,kj,ij->k", K_trans, K_trans, K_inv)
+
+            # Check if any of the variances is negative because of
+            # numerical issues. If yes: set the variance to 0.
+            y_var_negative = y_var < 0
+            if np.any(y_var_negative):
+                warnings.warn("Predicted variances smaller than 0. "
+                        "Setting those variances to 0.")
+                y_var[y_var_negative] = 0.0
+            return y_mean, np.sqrt(y_var)
+        else:
+            return y_mean
+
 
     def predict(self, X, return_std=False, return_cov=False):
         """Predict using the Gaussian process regression model
@@ -353,6 +398,43 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
                  for i in range(y_mean.shape[1])]
             y_samples = np.hstack(y_samples)
         return y_samples
+
+    # added by user
+    def log_marginal_likelihood_data(self, data_x, data_y, theta=None, normalize_data_y=True):
+        if theta == None:
+            theta = self.kernel_.theta
+        kernel = self.kernel_.clone_with_theta(theta)
+        print 'theta for log marginal likelyhood of testing data', theta
+
+        K = kernel(data_x)
+
+        K[np.diag_indices_from(K)] += self.alpha
+        try:
+            L = cholesky(K, lower=True)  # Line 2
+        except np.linalg.LinAlgError:
+            print 'choleky error ###', K
+            return -np.inf
+
+        # Support multi-dimensional output of data_y
+        # Normalize target value
+        if normalize_data_y:
+            data_y_mean = np.mean(data_y, axis=0)
+            # demean y
+            data_y = data_y - data_y_mean
+        y_train = data_y
+        if y_train.ndim == 1:
+            y_train = y_train[:, np.newaxis]
+
+        alpha = cho_solve((L, True), y_train)  # Line 3
+
+        # Compute log-likelihood (compare line 7)
+        log_likelihood_dims = -0.5 * np.einsum("ik,ik->k", y_train, alpha)
+        log_likelihood_dims -= np.log(np.diag(L)).sum()
+        log_likelihood_dims -= K.shape[0] / 2 * np.log(2 * np.pi)
+        log_likelihood = log_likelihood_dims.sum(-1)  # sum over dimensions
+
+        return log_likelihood
+
 
     def log_marginal_likelihood(self, theta=None, eval_gradient=False):
         """Returns log-marginal likelihood of theta for training data.

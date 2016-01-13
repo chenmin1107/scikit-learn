@@ -16,7 +16,8 @@ y = []
 for i in np.linspace(0,10,10):
     X.append([i, 0, 0, 0, 0, 0, 0])
     # y.append(i * 2)
-    y.append(0.1 * sin(i))
+    # y.append(0.1 * sin(i))
+    y.append(0.3 * sin(i))
 
 # preproscessing
 scaler = preprocessing.StandardScaler().fit(X)
@@ -41,15 +42,19 @@ print 'after kernel init'
 gp_test = GaussianProcessRegressor(kernel=kernel_test, alpha=0.0, normalize_y=True)
 
 print 'after GP regressor'
-# print("GPML kernel: %s" % gp_test.kernel_)
-# print("Log-marginal-likelihood: %.3f"
-#       % gp_test.log_marginal_likelihood(gp_test.kernel_.theta))
+gp_test.InitKernel()
+print("GPML kernel: %s" % gp_test.kernel_)
+print("Log-marginal-likelihood: %.3f"
+       % gp_test.log_marginal_likelihood_data(XT, y))
 
 gp_test.fit(XT, y)
 
 print("GPML kernel: %s" % gp_test.kernel_)
 print("Log-marginal-likelihood: %.3f"
       % gp_test.log_marginal_likelihood(gp_test.kernel_.theta))
+print("GPML kernel: %s" % gp_test.kernel_)
+print("Log-marginal-likelihood: %.3f"
+       % gp_test.log_marginal_likelihood_data(XT, y))
 
 
 X_ = []
