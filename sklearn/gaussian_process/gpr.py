@@ -139,10 +139,10 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         self.kernel_ = clone(self.kernel)
     def InitKernel_learned(self, theta_learned, alpha_learned, L_learned, X_train_learned, y_train_mean_learned):
         self.kernel_ = clone(self.kernel)
-        self.kernel_ = self.clone_with_theta(theta_learned)
-        self.alpha_learned = alpha_learned
-        self.L_learned = L_learned
-        self.X_train_learned = X_train_learned
+        self.kernel_ = self.kernel_.clone_with_theta(theta_learned)
+        self.alpha_learned = np.asarray(alpha_learned)
+        self.L_learned = np.asarray(L_learned)
+        self.X_train_learned = np.asarray(X_train_learned)
         self.y_train_mean_learned = y_train_mean_learned
     def GetTheta(self):
         return self.kernel_.theta
@@ -263,8 +263,8 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
         X = check_array(X)
 
         # Predict based on GP posterior
-        K_trans = self.kernel_(X, X_train_learned)
-        y_mean = K_trans.dot(alpha_learned)  # Line 4 (y_mean = f_star)
+        K_trans = self.kernel_(X, self.X_train_learned)
+        y_mean = K_trans.dot(self.alpha_learned)  # Line 4 (y_mean = f_star)
         y_mean = self.y_train_mean_learned + y_mean  # undo normal.
         if return_std:
             # compute inverse K_inv of K based on its Cholesky
