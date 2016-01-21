@@ -1796,6 +1796,227 @@ class PairwiseKernel(Kernel):
 """
 Kernel defined by User 
 """
+class RBFBoolS(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
+    """RBFBool kernel is a user defined kernel for autonomous driving on Intersection
+
+    It is defined by the following equation 
+
+    k((path_ID_i, Distance2junction_i, v_i, exist_i1, v_i1 ... ) 
+        , (path_ID_j, Distance2junction_j, v_j, exist_j1, v_j1 ... )) = 
+    exp(-1 / 2 (d((path_ID_i, path_ID_j) / length_scale_id, (Distance2junction_i, Distance2junction_j) /
+    length_scale_distance, (v_i, v_j)/ length_scale_speed, (exist_i1, exist_j1) / length_scale_exist_1,
+    (v_i1, v_j1) / length_scale_speed_1 ... )^2) 
+    """
+    def __init__(self, length_scale=1.0, length_scale_bounds=(1e-5, 1e5)):
+        if np.iterable(length_scale):
+            if len(length_scale) > 1:
+                self.anisotropic = True
+                self.length_scale = np.asarray(length_scale, dtype=np.float)
+            else:
+                print 'Error: , intersection navigation requries different length_scale for different patterns'
+                sys.exit(0)
+                self.anisotropic = False
+                self.length_scale = float(length_scale[0])
+        else:
+            self.anisotropic = False
+            self.length_scale = float(length_scale)
+        self.length_scale_bounds = length_scale_bounds
+
+        if self.anisotropic:  # anisotropic length_scale
+            self.hyperparameter_length_scale = \
+                Hyperparameter("length_scale", "numeric", length_scale_bounds,
+                               len(length_scale))
+        else:
+            self.hyperparameter_length_scale = \
+                Hyperparameter("length_scale", "numeric", length_scale_bounds)
+
+    def __call__(self, X, Y=None, eval_gradient=False):
+        """Return the kernel k(X, Y) and optionally its gradient.
+
+        Parameters
+        ----------
+        X : array, shape (n_samples_X, n_features)
+            Left argument of the returned kernel k(X, Y)
+
+        Y : array, shape (n_samples_Y, n_features), (optional, default=None)
+            Right argument of the returned kernel k(X, Y). If None, k(X, X)
+            if evaluated instead.
+
+        eval_gradient : bool (optional, default=False)
+            Determines whether the gradient with respect to the kernel
+            hyperparameter is determined. Only supported when Y is None.
+
+        Returns
+        -------
+        K : array, shape (n_samples_X, n_samples_Y)
+            Kernel k(X, Y)
+
+        K_gradient : array (opt.), shape (n_samples_X, n_samples_X, n_dims)
+            The gradient of the kernel k(X, X) with respect to the
+            hyperparameter of the kernel. Only returned when eval_gradient
+            is True.
+        """
+        # print 'call func has been called'
+        X = np.atleast_2d(X)
+        if self.anisotropic and X.shape[1] != self.length_scale.shape[0]:
+            raise Exception("Anisotropic kernel must have the same number of "
+                            "dimensions as data (%d!=%d)"
+                            % (self.length_scale.shape[0], X.shape[1]))
+
+        if Y is None:
+            dists = pdist(X / self.length_scale, metric='sqeuclidean')
+            K = np.exp(-.5 * dists)
+            # convert from upper-triangular matrix to square matrix
+            K = squareform(K)
+            np.fill_diagonal(K, 1)
+        else:
+            if eval_gradient:
+                raise ValueError(
+                    "Gradient can only be evaluated when Y is None.")
+            dists = cdist(X / self.length_scale, Y / self.length_scale,
+                          metric='sqeuclidean')
+            K = np.exp(-.5 * dists)
+
+        if eval_gradient:
+            if self.hyperparameter_length_scale.fixed:
+                # Hyperparameter l kept fixed
+                return K, np.empty((X.shape[0], X.shape[0], 0))
+            elif not self.anisotropic or self.length_scale.shape[0] == 1:
+                K_gradient = \
+                    (K * squareform(dists))[:, :, np.newaxis]
+                return K, K_gradient
+            elif self.anisotropic:
+                # We need to recompute the pairwise dimension-wise distances
+                K_gradient = (X[:, np.newaxis, :] - X[np.newaxis, :, :]) ** 2 \
+                    / (self.length_scale ** 2)
+                K_gradient *= K[..., np.newaxis]
+                print 'shape of K gradient: ', K_gradient.shape
+                print 'K and K gradient: ', K, K_gradient
+                return K, K_gradient
+            else:
+                raise Exception("Anisotropic kernels require that the number "
+                                "of length scales and features match.")
+        else:
+            return K
+
+    def __repr__(self):
+        if self.anisotropic:
+            return "{0}(length_scale=[{1}])".format(
+                self.__class__.__name__, ", ".join(map("{0:.3g}".format,
+                                                   self.length_scale)))
+        else:  # isotropic
+            return "{0}(length_scale={1:.3g})".format(
+                self.__class__.__name__, self.length_scale)
+#     def __init__(self, num_pattern, length_scale, length_scale_bounds=(1e-5,1e5)):
+#         self.length_scale = np.asarray(length_scale, dtype=np.float)
+#         self.num_pattern = num_pattern
+#         self.length_scale_bounds = length_scale_bounds
+#         self.start_pattern = 4
+#         self.pattern_len = 3
+#         self.length_pattern_start = 2
+#         self.length_pattern_len = 2
+# 
+#         self.hyperparameter_length_scale = Hyperparameter("length_scale", "numeric", length_scale_bounds,\
+#             len(length_scale))
+# 
+#     def __call__(self, X, Y=None, eval_gradient = False):
+#         """Return the kernel k(X, Y) and optionally its gradient.
+# 
+#         Parameters
+#         ----------
+#         X : array, shape (n_samples_X, n_features)
+#             Left argument of the returned kernel k(X, Y)
+# 
+#         Y : array, shape (n_samples_Y, n_features), (optional, default=None)
+#             Right argument of the returned kernel k(X, Y). If None, k(X, X)
+#             if evaluated instead.
+# 
+#         eval_gradient : bool (optional, default=False)
+#             Determines whether the gradient with respect to the kernel
+#             hyperparameter is determined. Only supported when Y is None.
+# 
+#         Returns
+#         -------
+#         K : array, shape (n_samples_X, n_samples_Y)
+#             Kernel k(X, Y)
+# 
+#         K_gradient : array (opt.), shape (n_samples_X, n_samples_X, n_dims_parameters)
+#             The gradient of the kernel k(X, X) with respect to the
+#             hyperparameter of the kernel. Only returned when eval_gradient
+#             is True.
+#         """
+#         print 'RBF bool has been called: ', self.length_scale
+#         X = np.atleast_2d(X)
+#         dists = []
+#         if Y is None:
+#             for i in range(len(X)):
+#                 for j in range(i + 1, len(X)):
+#                     dists.append(self.DistanceMetricWithBool(X[i], X[j], self.length_scale, self.num_pattern))
+#             
+#             dists = np.array(dists)
+#             K = np.exp(-.5 * dists)
+#             K = squareform(K)
+#             np.fill_diagonal(K, 1) 
+#         else:
+#             if eval_gradient:
+#                 raise ValueError(
+#                     "Gradient can only be evaluated when Y is None.")
+#             for i in range(len(X)):
+#                 dist = []
+#                 for j in range(len(Y)):
+#                     dis = self.DistanceMetricWithBool(X[i], Y[j], self.length_scale, self.num_pattern)
+#                     dist.append(np.exp(-.5 * dis))
+#                 dists.append(dist)
+#             K = np.array(dists)
+# 
+#         if eval_gradient:
+#             #gradient with respect to the length scale
+#             length_scale_gradient = np.zeros([len(X), len(X), len(self.length_scale)])
+#             for i in range(0, len(X)):
+#                 for j in range(0, len(X)):
+#                     length_scale_gradient[i][j][0] = K[i][j] * self.SqEuclidean(X[i][0:2], X[j][0:2], self.length_scale[0])\
+#                             / self.length_scale[0]
+#                     length_scale_gradient[i][j][1] = K[i][j] * self.SqEuclidean(X[i][2:4], X[j][2:4], self.length_scale[1])\
+#                             / self.length_scale[1]
+#                     for k in range(self.num_pattern):
+#                         # compute the gradient for the weight of the ith pattern
+#                         index = self.start_pattern + self.pattern_len * k 
+#                         index_len = self.length_pattern_start + self.length_pattern_len * k
+#                         length_scale_gradient[i][j][index_len] += K[i][j] * self.SqEuclidean(X[i][index],\
+#                                 X[j][index], self.length_scale[index_len]) / self.length_scale[index_len]
+#                         length_scale_gradient[i][j][index_len+1] += K[i][j] * self.SqEuclidean(X[i][index+1:index+3], X[j][index+1:index+3],\
+#                                 self.length_scale[index_len+1]) / self.length_scale[index_len+1]
+#             print 'shape of length scale gradient', length_scale_gradient.shape
+#             return K, length_scale_gradient
+# 
+#         else:
+#             return K 
+#             
+#     def __repr__(self):
+#         return "{0}(length_scale={1})".format(self.__class__.__name__,\
+#             ", ".join(map("{0:.3g}".format, self.length_scale)))
+# 
+#     def SqEuclidean(self, x1, x2, length_scale_):
+#         return sqeuclidean(x1 / length_scale_, x2 / length_scale_)
+# 
+#     def DistanceMetricWithBool(self, x1, x2, length_scale, num_pattern):
+#         """
+#         length_scale[0]: length scale for the distance metric
+#         length_scale[1]: length scale for the speed metric
+#         length_scale[pattern_i]: length_scale for the exist metric (which is boolean distance)
+#         weight_scale[pattern_i + 1]: length_scale for the speed metric of the ith pattern
+#         """
+#         distance = 0
+#         distance += sqeuclidean(x1[0:2] / length_scale[0], x2[0:2] / length_scale[0])
+#         distance += sqeuclidean(x1[2:4] / length_scale[1], x2[2:4] / length_scale[1])
+#         for i in range(num_pattern):
+#             index = self.start_pattern + self.pattern_len * i 
+#             index_len = self.length_pattern_start + self.length_pattern_len * i
+#             distance += sqeuclidean(x1[index] / length_scale[index_len] , x2[index] / length_scale[index_len])
+#             distance += sqeuclidean(x1[index+1:index+3] / length_scale[index_len + 1],\
+#                     x2[index+1:index+3] / length_scale[index_len + 1]) 
+#         return distance
+
 class RBFBool(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
     """RBFBool kernel is a user defined kernel for autonomous driving on Intersection
 
