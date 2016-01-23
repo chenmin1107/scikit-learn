@@ -472,11 +472,11 @@ class GaussianProcessRegressor(BaseEstimator, RegressorMixin):
 
         if eval_gradient:
             K, K_gradient = kernel(self.X_train_, eval_gradient=True)
-            print 'eval gradient in log likely'
+            # print 'eval gradient in log likely'
             # print 'K gradient for log likely: ', K_gradient
         else:
             K = kernel(self.X_train_)
-            print 'do not eval gradient in log likely'
+            # print 'do not eval gradient in log likely'
 
         K[np.diag_indices_from(K)] += self.alpha
         try:

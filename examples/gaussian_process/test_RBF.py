@@ -6,6 +6,7 @@ from sklearn.gaussian_process.kernels \
     import SquareExpWithBool, RBF
 from sklearn.datasets import fetch_mldata
 import sys
+from math import *
 
 # generate some test data to test the new kernel defined for Intersection
 # navigation

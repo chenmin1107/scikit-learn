@@ -1888,10 +1888,8 @@ class RBFBoolS(StationaryKernelMixin, NormalizedKernelMixin, Kernel):
             elif self.anisotropic:
                 # We need to recompute the pairwise dimension-wise distances
                 K_gradient = (X[:, np.newaxis, :] - X[np.newaxis, :, :]) ** 2 \
-                    / (self.length_scale ** 2)
+                    / (self.length_scale ** 3)
                 K_gradient *= K[..., np.newaxis]
-                print 'shape of K gradient: ', K_gradient.shape
-                print 'K and K gradient: ', K, K_gradient
                 return K, K_gradient
             else:
                 raise Exception("Anisotropic kernels require that the number "
